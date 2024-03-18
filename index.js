@@ -35,6 +35,7 @@ app.post("/courseData", async (req, res) => {
             module_duration: createPayload.module_duration,
             duration_between_module: createPayload.duration_between_module,
             instructor: createPayload.instructor,
+            content_url: createPayload.content_url,
             published: createPayload.published,
         });
 

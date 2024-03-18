@@ -8,6 +8,7 @@ const courseSchema= mongoose.Schema({
     module_duration:Number,
     duration_between_module:Number,
     instructor: String,
+    content_url: String,
     published:Boolean,
 })
 

@@ -7,6 +7,7 @@ const createCourseValidate = zod.object({
     module_duration:zod.number(),
     duration_between_module:zod.number(),
     instructor: zod.string(),
+    content_url: zod.string(),
     published:zod.boolean(),
 })
 
