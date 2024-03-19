@@ -69,7 +69,7 @@ app.get("/courseData", async(req, res) =>{
 })
 
 app.put("/publishCourse", async (req, res) => {
-    const { ids } = req.body;
+    const { ids, catalogId} = req.body;
 
     try {
         // Update the courses
@@ -107,7 +107,7 @@ app.put("/publishCourse", async (req, res) => {
     
         const accessToken = await responseToken.data.access_token;
         console.log("Before start migration", accessToken)
-        const data = await startMigration({baseUrl:"https://learningmanager.adobe.com",accessToken})
+        const data = await startMigration({baseUrl:"https://learningmanager.adobe.com",accessToken, catalogId})
         console.log("------------",data)
         res.json({
             msg: "Courses published successfully",
@@ -148,14 +148,21 @@ async function refreshToken() {
   }
 }
 
-const startMigration = async ({ baseUrl, accessToken }) => {
+const startMigration = async ({ baseUrl, accessToken,catalogId }) => {
   let response;
-  console.log("Insode start migration", baseUrl, accessToken)
+  console.log("Insode start migration", baseUrl, accessToken);
+
+  let urlPath;
+  if(catalogId === undefined){
+    urlPath= `${baseUrl}/primeapi/v2/bulkimport/startrun`;
+  } else {
+    urlPath= `${baseUrl}/primeapi/v2/bulkimport/startrun?catalogid=${catalogId}`;
+  }
   try {
     const config = {
       method: 'post',
       maxBodyLength: Infinity,
-      url: `${baseUrl}/primeapi/v2/bulkimport/startrun`,
+      url: urlPath,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${accessToken}`,
