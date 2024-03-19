@@ -8,7 +8,7 @@ const corsOptions = {
     optionsSuccessStatus: 200 // some legacy browsers (IE11, various SmartTVs) choke on 204
   };
 app.use(express.json());
-app.use(cors());
+app.use(cors(corsOptions));
 const port = 3000;
 const path = require("path");
 const { course } = require("./db");
