@@ -5,10 +5,8 @@ const courseSchema= mongoose.Schema({
     name:String,
     id: String,
     no_of_modules: Number,
-    module_duration:Number,
-    duration_between_module:Number,
+    modules:Array,
     instructor: String,
-    content_url: String,
     published:Boolean,
 })
 

@@ -1,11 +1,11 @@
 /* eslint-disable no-useless-escape */
 
 const moduleTransform = `$.{
-    "id": $.id,
+    "id": $.modId,
     "moduleType": 'Activity',
     "visibility": "Shared",
     "title": (
-        $input := $.'name';
+        $input := $.'module_name';
         $result := ($length($input) > 255) ?  $replace(($substring($input, 0, 255)), /\s+\S*$/, '...')  : $input
     ),
     "author":$.instructor
@@ -13,11 +13,11 @@ const moduleTransform = `$.{
 
 const moduleVersionTransform = `$.{
     "contentType ": 'HYPERLINK',
-    "duration": $.module_duration * 60,
-    "desiredDuration": $.duration_between_module * 60,
-    "contentUrl": $.content_url,
-    "moduleVersion": "1",
-    "moduleId": $.id
+    "duration": 600,
+    "desiredDuration": 120,
+    "contentUrl": $.contentUrl,
+    "moduleVersion":  $.modVersion,
+    "moduleId": $.modId
 }`;
 
 const courseTransform = `$.{
@@ -37,8 +37,8 @@ const courseTransform = `$.{
 
 const courseModuleTransform = `$.{
     "courseId ": $.id,
-    "moduleId": $.id,
-    "moduleVersion": "1",
+    "moduleId": $.modId,
+    "moduleVersion": $.modVersion,
     "courseModuleType": "CONTENT",
     "moduleOrderInCourse": 0
 }`;

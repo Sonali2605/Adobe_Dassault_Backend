@@ -1,7 +1,6 @@
 const express= require("express");
 const cors = require("cors");
 const moment = require('moment');
-const{createCourseValidate} = require("./types")
 const app = express();
 const corsOptions = {
     origin: "http://54.152.80.48:3000",
@@ -21,28 +20,27 @@ app.use(express.static(buildpath));
 const  {isEmpty,keys} = require("lodash");
 const { stringify } = require('csv-stringify/sync');
 const SftpClient = require('ssh2-sftp-client');
-const axios = require("axios")
+const axios = require("axios");
+const {base_adobe_url,refreshTokens,clientSecret,clientId} = require("./AppConfig")
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; 
 app.post("/courseData", async (req, res) => {
     const createPayload = req.body;
-    const parsedPayload = createCourseValidate.safeParse(createPayload);
+    // const parsedPayload = createCourseValidate.safeParse(createPayload);
     
-    if (!parsedPayload.success) {
-        res.status(411).json({
-            msg: "You sent wrong inputs"
-        });
-        return;
-    }
+    // if (!parsedPayload.success) {
+    //     res.status(411).json({
+    //         msg: "You sent wrong inputs"
+    //     });
+    //     return;
+    // }
 
     try {
         const createdCourse = await course.create({
             name: createPayload.name,
             id: createPayload.id,
             no_of_modules: createPayload.no_of_modules,
-            module_duration: createPayload.module_duration,
-            duration_between_module: createPayload.duration_between_module,
+            modules: createPayload.modules,
             instructor: createPayload.instructor,
-            content_url: createPayload.content_url,
             published: createPayload.published,
         });
 
@@ -70,31 +68,33 @@ app.get("/courseData", async(req, res) =>{
 
 app.put("/publishCourse", async (req, res) => {
     const { ids, catalogId} = req.body;
-
+    console.log("nnnnnnnnnn",ids, catalogId)
     try {
         // Update the courses
         const updatedCourses = await course.updateMany(
             { _id: { $in: ids } },
             { published: true }
         );
-
+        console.log("mmmmmmmmmmmmmmmm",updatedCourses )
         // Fetch the updated courses' data
         const publishedCourses = await course.find({ _id: { $in: ids } });
-
+        console.log("00000000000000000000000000000",publishedCourses)
         // Call transformUdemyMetadataToALM after data is returned
         const transformedData = await transformUdemyMetadataToALM(publishedCourses);
-
+        // console.log("ppppppppppppppppp",transformDate)
         const activeSftpConnection = await createSFTPConnection();
-        console.log("activeSftpConnection",activeSftpConnection)
         await moveAndRenameExistingFilesToArchived({sftp:activeSftpConnection,filePath:"/migration/Adobe_Dassault/Adobe_Dassault",files:["module","module_version","course","course_module"]})
+        // const fileExist = await sftp.exists(`${filePath}/${file}.csv`);
+        const fileExist1 = await activeSftpConnection.exists("/migration/Adobe_Dassault/Adobe_Dassault/module_version.csv");
+        console.log("FileExist after deletion", fileExist1)
         await generateAndPushFilesToSFTP({activeSftpConnection, sftpConfig:{path:"/migration/Adobe_Dassault/Adobe_Dassault"},courseData: transformedData})
         const params = new URLSearchParams({
-          client_id: "eabb3668-a036-45c5-ba10-7a4160827517",
-          client_secret:"5ec25713-5718-4d71-91bd-c18f703b3407",
-          refresh_token:"371390c98a8c3a4a24922adf11fb6b08",
+          client_id: clientId,
+          client_secret:clientSecret,
+          refresh_token:refreshTokens,
         });
     
-        const url = `https://learningmanager.adobe.com/oauth/token/refresh`;
+        const url = `${base_adobe_url}/oauth/token/refresh`;
         const responseToken = await axios.post(
           url,
           params,
@@ -107,7 +107,7 @@ app.put("/publishCourse", async (req, res) => {
     
         const accessToken = await responseToken.data.access_token;
         console.log("Before start migration", accessToken)
-        const data = await startMigration({baseUrl:"https://learningmanager.adobe.com",accessToken, catalogId})
+        const data = await startMigration({baseUrl:base_adobe_url,accessToken, catalogId})
         console.log("------------",data)
         res.json({
             msg: "Courses published successfully",
@@ -129,7 +129,7 @@ async function refreshToken() {
       refresh_token:"371390c98a8c3a4a24922adf11fb6b08",
     });
 
-    const url = `https://learningmanager.adobe.com/oauth/token/refresh`;
+    const url = `${base_adobe_url}/oauth/token/refresh`;
     const responseToken = await axios.post(
       url,
       params,
@@ -191,40 +191,63 @@ const transformUdemyMetadataToALM = async (coursesMetadata) => {
     const courseTransformFinalResult = [];
     const courseModuleTransformFinalResult = [];
   
-    console.log("22222222222222", coursesMetadata);
+    console.log("22222222222222", coursesMetadata,JSON.stringify(coursesMetadata) );
     try {
       await Promise.allSettled(coursesMetadata.map(async (ele) => {
+        console.log("5555555555555555555555555555555555555555555555555555555",ele)
+        let modulesArray=[];
+        console.log("Module array0",modulesArray);
+        ele.modules.forEach((module, index) => {
+          modulesArray.push({
+            _id: ele._id,
+            name: ele.name,
+            id: ele.id,
+            modId: ele.id + "_" +index+1,
+            no_of_modules: ele.no_of_modules,
+            instructor: ele.instructor,
+            published: ele.published,
+            module_name: module.name,
+            contentUrl: module.contentUrl,
+            modVersion: (index + 1) + '',
+          });
+        });
+        
+        // Now modulesArray contains an array of objects, each representing a module within the course
+        console.log("Module array1",modulesArray);
+        
         const importDate = new Date();
-        const formattedDate = importDate.toISOString().slice(0, 10);
-  console.log("llllllll",importDate, formattedDate)
-        const moduleTransformExpression = jsonata(moduleTransform);
+        const formattedDate = importDate.toISOString();
+        const getDate= transformDate(formattedDate);
+
+        const courseTransformExpression = jsonata(courseTransform);
+        const courseTransformResult = await courseTransformExpression.evaluate(ele);
+        courseTransformFinalResult.push({
+          ...courseTransformResult,
+          courseCreationDate: getDate,
+        });
+
+        await Promise.allSettled(modulesArray.map(async (ele) => {
+          const moduleTransformExpression = jsonata(moduleTransform);
         console.log("moduleTranform",moduleTransformExpression )
         const moduleTransformResult = await moduleTransformExpression.evaluate(ele);
         console.log("moduleTranform2",moduleTransformResult )
         moduleTransformFinalResult.push({
           ...moduleTransformResult,
-          lastModifiedDate: importDate,
+          lastModifiedDate: getDate,
         });
         console.log("moduleTranform3",moduleTransformFinalResult )
         const moduleVersionTransformExpression = jsonata(moduleVersionTransform);
         const moduleVersionTransformResult = await moduleVersionTransformExpression.evaluate(ele);
         moduleVersionTransformFinalResult.push({
           ...moduleVersionTransformResult,
-          dateCreated: importDate,
+          dateCreated: getDate,
         });
-  
-        const courseTransformExpression = jsonata(courseTransform);
-        const courseTransformResult = await courseTransformExpression.evaluate(ele);
-        courseTransformFinalResult.push({
-          ...courseTransformResult,
-          courseCreationDate: importDate,
-        });
-  
         const courseModuleTransformExpression = jsonata(courseModuleTransform);
         const courseModuleTransformResult = await courseModuleTransformExpression.evaluate(ele);
         courseModuleTransformFinalResult.push({
           ...courseModuleTransformResult,
         });
+        }))
       }));
     } catch (err) {
       console.log(
@@ -248,7 +271,7 @@ const transformUdemyMetadataToALM = async (coursesMetadata) => {
   const moveAndRenameExistingFilesToArchived = async ({
     sftp, filePath, files
   }) => {
-    console.log(`Moving existing files to archived folder on SFTP for Udemy Org Id `, sftp, filePath,files);
+    console.log(`Moving existing files to archived folder on SFTP for Udemy Org Id `);
     const now = moment.utc();
     try {
       const archivedExist = await sftp.exists(`${filePath}/Archived`);
@@ -261,13 +284,23 @@ const transformUdemyMetadataToALM = async (coursesMetadata) => {
       await Promise.allSettled(files.map(async (file) => {
         const fileExist = await sftp.exists(`${filePath}/${file}.csv`);
         if (fileExist) {
+          console.log("inside file", fileExist, file)
           await sftp.rcopy(`${filePath}/${file}.csv`, `${filePath}/Archived/${file}.csv`);
           await sftp.rename(`${filePath}/Archived/${file}.csv`, `${filePath}/Archived/${file}_${now.toISOString()}.csv`);
           await sftp.delete(`${filePath}/${file}.csv`);
         }
         return {};
       }));
+      await sftp.delete(`${filePath}/module_version.csv`);
       console.log(`Moved and Renamed existing files on SFTP for Udemy Org Id `);
+      const fileExist1 = await sftp.exists(`${filePath}/module.csv`);
+      console.log("file existis inside function check", fileExist1);
+      const fileExist2 = await sftp.exists(`${filePath}/course_module.csv`);
+      console.log("file existis inside function check", fileExist2)
+      const fileExist3 = await sftp.exists(`${filePath}/course.csv`);
+      console.log("file existis inside function check", fileExist3)
+      const fileExist4 = await sftp.exists(`${filePath}/module_version.csv`);
+      console.log("file existis inside function check", fileExist4)
     } catch (err) {
       console.log(`Error in moving and renaming file from SFTP for Udemy Org Id ! Error at moveAndRenameExistingFilesToArchived -`, err.message);
       throw new Error('Error in moving and renaming file from SFTP!');
